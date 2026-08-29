@@ -1,0 +1,10 @@
+{
+  "_comment": "コア7関数のmd5基準値（PR-1でindex.html v1.5から採取）。以後のPRでこれらの関数はバイト同一を維持すること（仕様書§6）。",
+  "calc": "fd2748ce37a0cd2d924e2f20ee80419b",
+  "drawRail": "a7846dd124918afa1dcb9900fac5e219",
+  "verdict": "aedcb14b35bf9ce26f38660863a45828",
+  "preset": "fe2762362270d6a91ff7d9c4c8315a69",
+  "mode": "457f5a024fe41049d36b135e6e7a0594",
+  "row": "5b2241661fa37879e0f2ba48c727816e",
+  "fmt": "566063ad9eabd21ed64a576d298f7962"
+}

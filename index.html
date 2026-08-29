@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LPレンジ設計計器｜σ連動</title>
+<!-- v1.1（2026-08-20）P1 σ実測: CMC日足CSV読込→σ14/σ30/ATR%14(Wilder)/365日タイル→プリセット実測置換。コア計算(calc/drawRail/verdict)はv1から無変更 -->
+<!-- v1.2（2026-08-24）P2a 中期設計モード: 2資産CSV（相対ペア対応）→保有期間×被覆率の経験分位バンド→③集中倍率・④⑤判定接続。コア7関数は引き続き無変更 -->
+<!-- v1.3（2026-08-24）用語説明カード: details/summary折りたたみ・HTML+CSSのみ・JS追加ゼロ・投資家向け説明文に転用可能な§5④準拠の文言 -->
+<!-- v1.4（2026-08-24）P2b 対HODL比較バックテスト: V3評価式で履歴再生（即日同率再センタリング・単利手数料・look-ahead注記）。コア7関数は引き続き無変更 -->
+<!-- v1.5（2026-08-24）P1後半 GeckoTerminal自動取得: プールアドレス→Vol24h/TVL/手数料階層を両タブの④へ反映。CORS失敗時は手入力に劣化。初回実機確認項目 -->
+<style>
+:root{
+  --paper:#F4F6F8; --card:#FFFFFF; --ink:#17232E; --sub:#5A6B78; --rule:#C9D3DA;
+  --teal:#0E5D63; --amber:#B2611B; --green:#1F7A4C; --red:#B3402A;
+  --mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,monospace;
+  --sans:"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.65;padding:14px 12px 60px}
+.wrap{max-width:680px;margin:0 auto}
+header{margin:6px 2px 14px}
+.kicker{font-size:11px;letter-spacing:.18em;color:var(--teal);font-weight:700}
+h1{font-size:21px;font-weight:800;letter-spacing:.01em;margin-top:2px}
+.lede{font-size:12.5px;color:var(--sub);margin-top:4px}
+.card{background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:14px;margin-bottom:12px}
+/* ---- レール図（シグネチャ）---- */
+#railcard{padding:18px 14px 10px}
+.rail{position:relative;height:112px}
+.rail-line{position:absolute;left:2%;right:2%;top:56px;height:2px;background:var(--rule)}
+.band{position:absolute;top:44px;height:26px;border-radius:4px;background:linear-gradient(90deg,rgba(178,97,27,.28),rgba(14,93,99,.20));border:1.5px solid var(--teal)}
+.tick{position:absolute;top:38px;width:2px;height:38px;background:var(--ink)}
+.tick.spot{background:var(--ink)}
+.ticklab{position:absolute;top:84px;transform:translateX(-50%);font-family:var(--mono);font-size:11px;color:var(--sub);white-space:nowrap}
+.ticklab b{color:var(--ink);font-size:12px}
+.exitlab{position:absolute;top:14px;font-size:10.5px;letter-spacing:.08em;font-weight:700}
+.exitlab.dn{color:var(--amber)} .exitlab.up{color:var(--teal)}
+.tbadge{position:absolute;top:6px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:11px;background:var(--ink);color:#fff;border-radius:20px;padding:2px 10px}
+.tbadge.warn{background:var(--red)}
+/* ---- タブ・入力 ---- */
+.tabs{display:flex;gap:6px;margin-bottom:12px}
+.tabs button{flex:1;padding:9px 0;border:1px solid var(--rule);background:#fff;border-radius:8px;font-size:13.5px;font-weight:700;color:var(--sub);cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--teal);border-color:var(--teal);color:#fff}
+.tabs button:focus-visible,.chip:focus-visible,input:focus-visible,select:focus-visible{outline:2.5px solid var(--teal);outline-offset:1px}
+fieldset{border:0}
+legend{font-size:11px;letter-spacing:.14em;color:var(--sub);font-weight:700;margin-bottom:8px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.field label{display:block;font-size:11.5px;color:var(--sub);margin-bottom:2px}
+.field input,.field select{width:100%;padding:8px;border:1px solid var(--rule);border-radius:7px;font-family:var(--mono);font-size:15px;background:#fff;color:var(--ink)}
+.chips{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.chip{border:1px solid var(--rule);background:#fff;border-radius:20px;padding:4px 11px;font-size:12px;cursor:pointer;color:var(--ink)}
+.chip small{color:var(--sub)}
+/* ---- 出力台帳 ---- */
+table{width:100%;border-collapse:collapse}
+td{padding:7px 2px;border-bottom:1px solid var(--rule);font-size:13.5px;vertical-align:baseline}
+td.k{color:var(--sub);width:52%}
+td.v{font-family:var(--mono);text-align:right;font-weight:700;font-size:15px}
+td.v small{font-weight:400;color:var(--sub);font-size:11px}
+tr.hero td.v{font-size:19px}
+tr:last-child td{border-bottom:0}
+.ref{font-family:var(--mono);font-size:10px;color:var(--sub)}
+.verdict{border-radius:8px;padding:10px 12px;font-size:13px;font-weight:700;margin-top:10px}
+.v-ok{background:#E8F3EC;color:var(--green)} .v-warn{background:#F7EEDF;color:var(--amber)} .v-bad{background:#F7E6E1;color:var(--red)}
+.note{font-size:11.5px;color:var(--sub);margin-top:8px}
+footer{font-size:11px;color:var(--sub);line-height:1.8;margin-top:16px;padding:0 2px}
+footer .f{font-family:var(--mono)}
+/* ---- 用語説明（v1.3・JSなし）---- */
+details.glossary{background:var(--card);border:1px solid var(--rule);border-radius:10px;margin-bottom:12px}
+details.glossary summary{padding:11px 14px;font-size:13px;font-weight:700;color:var(--teal);cursor:pointer;list-style:none}
+details.glossary summary::-webkit-details-marker{display:none}
+details.glossary summary::before{content:'▸ '}
+details.glossary[open] summary::before{content:'▾ '}
+.gbody{padding:0 14px 13px;font-size:12.5px;line-height:1.75;color:var(--sub)}
+.gbody h3{font-size:11px;letter-spacing:.14em;color:var(--sub);font-weight:700;margin:11px 0 5px;border-top:1px dashed var(--rule);padding-top:11px}
+.gbody h3.first{border-top:0;padding-top:2px;margin-top:0}
+.gbody dl{margin:0}
+.gbody dt{font-weight:700;color:var(--ink);margin-top:7px}
+.gbody dd{margin:1px 0 0 0}
+.gc{font-weight:700}
+.gc.g{color:var(--green)}.gc.y{color:var(--amber)}.gc.r{color:var(--red)}
+.gbody .caution{color:var(--amber);font-weight:700}
+/* ---- プール自動取得（v1.5）---- */
+.gpbar{margin-top:11px;padding-top:11px;border-top:1px dashed var(--rule)}
+.gpbar label{display:block;font-size:11.5px;color:var(--sub);margin-bottom:4px}
+.gprow{display:flex;gap:6px}
+.gprow select{width:86px;padding:8px;border:1px solid var(--rule);border-radius:7px;font-family:var(--mono);font-size:13px;background:#fff;color:var(--ink)}
+.gprow input{flex:1;min-width:0;padding:8px;border:1px solid var(--rule);border-radius:7px;font-family:var(--mono);font-size:13px;background:#fff;color:var(--ink)}
+.gpbtn{border:1px solid var(--teal);background:var(--teal);color:#fff;border-radius:7px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans)}
+/* ---- バックテスト（v1.4）---- */
+.btlegend{font-size:11px;letter-spacing:.14em;color:var(--sub);font-weight:700;margin-bottom:8px}
+#btBlock{margin-top:11px;padding-top:11px;border-top:1px dashed var(--rule)}
+/* ---- 実測σ読込（v1.1）---- */
+.csvbar{margin-top:11px;padding-top:11px;border-top:1px dashed var(--rule)}
+.csvbar label{display:block;font-size:11.5px;color:var(--sub);margin-bottom:4px}
+.csvbar input[type=file]{width:100%;font-size:12px;color:var(--sub)}
+.csvbar input[type=file]::file-selector-button{border:1px solid var(--teal);background:#fff;color:var(--teal);border-radius:7px;padding:6px 12px;font-size:12.5px;font-weight:700;margin-right:8px;cursor:pointer;font-family:var(--sans)}
+.csvsum{margin-top:8px;border:1px solid var(--rule);border-radius:8px;padding:9px 11px;font-size:12px;line-height:1.75;color:var(--sub)}
+.csvsum .num{font-family:var(--mono);font-weight:700;color:var(--ink)}
+.csvsum.err{background:#F7E6E1;border-color:var(--red);color:var(--red);font-weight:700}
+.csvsum .warnline{color:var(--amber);font-weight:700}
+.chip.measured{border-color:var(--teal);color:var(--teal);font-weight:700;background:#EDF4F4}
+@media (prefers-reduced-motion:no-preference){.band,.tick{transition:left .25s,width .25s}}
+@media (max-width:420px){.grid{grid-template-columns:1fr 1fr}.field input{font-size:14px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="kicker">LP OPERATIONS ── σ連動レンジ計器</div>
+  <h1>レンジ設計・検証ツール</h1>
+  <div class="lede">実現ボラティリティからレンジ幅を決め、期待滞在日数・集中倍率・実効利回りで妥当性を判定する。ETH/USDC・WETH/cbBTCなど任意のペアに対応（<b>そのペアの相対価格のσ</b>を使うこと）。</div>
+</header>
+
+<div class="card" id="railcard" aria-label="レンジ図">
+  <div class="rail" id="rail">
+    <span class="tbadge" id="tbadge">期待滞在 –日</span>
+    <span class="exitlab dn" id="exdn" style="left:2%">▼下抜け＝ETH側100%</span>
+    <span class="exitlab up" id="exup" style="right:2%">上抜け＝USDC側100%▲</span>
+    <div class="rail-line"></div>
+    <div class="band" id="band"></div>
+    <div class="tick" id="tkL"></div><div class="tick spot" id="tkS"></div><div class="tick" id="tkU"></div>
+    <div class="ticklab" id="lbL"></div><div class="ticklab" id="lbS"></div><div class="ticklab" id="lbU"></div>
+  </div>
+</div>
+
+<details class="glossary">
+  <summary>各項目の見方（用語の説明）</summary>
+  <div class="gbody">
+    <h3 class="first">共通の考え方</h3>
+    <dl>
+      <dt>σ（シグマ・日次ボラティリティ）</dt>
+      <dd>その資産が1日にだいたい何%動くかの目安。天気でいう風の強さにあたり、数値が大きいほど同じ幅のレンジから出やすくなる。</dd>
+      <dt>経験分位バンド（中期設計タブ）</dt>
+      <dd>過去の各日にエントリーしていた場合に実際へ生じた値動きのうち、指定した割合（例: 90%）が収まった幅。予想や理論式ではなく、実際の歴史を物差しにした概算の目安。</dd>
+      <dt>集中倍率</dt>
+      <dd>フルレンジ（V2型）に比べて同じ資金を何倍濃く置けるかの目安。狭いレンジほど倍率が上がり手数料の機会は増えるが、レンジから出やすくなる。濃さと安全のトレードオフを表す。</dd>
+      <dt>実効APR（④）とボラ由来コスト（⑤）</dt>
+      <dd>④は手数料収入の年率換算の概算で、家賃にあたる。⑤は価格変動により生じるコストの概算で、建物の傷みにあたる。④が⑤を上回ることが損益分岐の目安で、下回る場合はその幅・そのプールでは割に合わない可能性がある。</dd>
+      <dt>経路依存</dt>
+      <dd>同じ運用ルールでも、開始した日によって結果が大きく変わる性質。短い期間の成績だけでは運用の良し悪しは判断できない。</dd>
+      <dt>窓数（中期設計タブ）</dt>
+      <dd>統計の元になったサンプル数。過去の何通りのエントリー日を試した結果かを示し、多いほど参考度が上がる。</dd>
+    </dl>
+    <h3>タブ別・出力の読み方</h3>
+    <dl>
+      <dt>設計する</dt>
+      <dd>現在のσと目標滞在日数から推奨レンジと期待滞在日数（②式・無ドリフト近似の目安）を計算する。実測σ読込の値は前日までの計測で、急変当日の動きを含まない場合がある点に注意。</dd>
+      <dt>既存レンジを検証</dt>
+      <dd>運用アプリのMin/Maxを転記すると、実効半幅・幾何中心・集中倍率・そのσでの期待滞在を逆算する。</dd>
+      <dt>中期設計</dt>
+      <dd>読み込んだ過去データの経験分位でレンジ幅を決める。分子CSVのみならUSD建て、分母CSVも読み込むと相対価格（分子÷分母）で設計する。<span class="caution">レンジを下に抜けた場合、資産は全て値下がりした側の通貨になります。</span>中央値バンドは「典型的な経路」の参考値で、被覆バンドより狭い。相対価格は日々の急変には比較的強い一方、ゆるやかな一方向の動き（トレンド）には弱い傾向が過去データで確認されている。</dd>
+    </dl>
+    <h3>判定文の色</h3>
+    <dl>
+      <dt><span class="gc g">緑</span>／<span class="gc y">黄</span>／<span class="gc r">赤</span></dt>
+      <dd><span class="gc g">緑</span>＝滞在の目安が確保されている状態。<span class="gc y">黄</span>＝滞在が短め、または手数料がコストを下回る概算で、余裕の再検討を推奨。<span class="gc r">赤</span>＝期待滞在が3日未満の「毎日再設定ゾーン」で、幅・条件の見直しを推奨。いずれも概算に基づく目安であり、将来の結果を保証するものではない。</dd>
+    </dl>
+  </div>
+</details>
+
+<div class="tabs" role="tablist">
+  <button role="tab" aria-selected="true" id="tabA" onclick="setMode('A')">設計する</button>
+  <button role="tab" aria-selected="false" id="tabB" onclick="setMode('B')">既存レンジを検証</button>
+  <button role="tab" aria-selected="false" id="tabC" onclick="setMode('C')">中期設計</button>
+</div>
+
+<div class="card" id="paneA">
+  <fieldset>
+    <legend>入力 ── 設計</legend>
+    <div class="grid">
+      <div class="field"><label for="aP">現在価格（相対価格）</label><input id="aP" type="number" value="1913" step="any"></div>
+      <div class="field"><label for="aS">日次σ %（実現ボラ）</label><input id="aS" type="number" value="4.0" step="0.1"></div>
+      <div class="field"><label for="aT">目標滞在日数</label><input id="aT" type="number" value="14" step="1"></div>
+      <div class="field"><label for="aK">安全係数 k（1.0〜2.0）</label><input id="aK" type="number" value="1.4" step="0.1"></div>
+      <div class="field"><label for="aSkew">下方スキュー（下幅÷上幅）</label><input id="aSkew" type="number" value="1.25" step="0.05"></div>
+      <div class="field"><label for="aFee">手数料階層</label><select id="aFee"><option value="0.0001">0.01%</option><option value="0.0005" selected>0.05%</option><option value="0.003">0.3%</option><option value="0.01">1.0%</option></select></div>
+      <div class="field"><label for="aVol">Vol24h（$・任意）</label><input id="aVol" type="number" placeholder="GeckoTerminal値" step="any"></div>
+      <div class="field"><label for="aTvl">TVL（$・任意）</label><input id="aTvl" type="number" placeholder="GeckoTerminal値" step="any"></div>
+      <div class="field"><label for="aUtil">想定インレンジ稼働率 %</label><input id="aUtil" type="number" value="80" step="5"></div>
+    </div>
+    <div class="gpbar">
+      <label for="gpAddrA">プール実測値の自動取得（GeckoTerminal・④の手数料・Vol24h・TVLへ反映）</label>
+      <div class="gprow">
+        <select id="gpNetA"><option value="base" selected>base</option><option value="eth">eth</option></select>
+        <input id="gpAddrA" type="text" placeholder="0x… プールアドレス" spellcheck="false">
+        <button type="button" class="gpbtn" onclick="gpGo('A')">取得</button>
+      </div>
+      <div id="gpStatA" class="csvsum" hidden></div>
+    </div>
+    <div class="csvbar">
+      <label for="csvFile">実測σ読込 ── CMC日足CSV（セミコロン区切り・必ずUSD建てでエクスポート）</label>
+      <input id="csvFile" type="file" accept=".csv,text/csv">
+      <div id="csvSum" class="csvsum" hidden></div>
+    </div>
+    <div class="chips" id="chips" aria-label="σプリセット">
+      <button class="chip" onclick="preset(2.2)">静穏 <small>σ2.2</small></button>
+      <button class="chip" onclick="preset(3.0)">通常下 <small>σ3.0</small></button>
+      <button class="chip" onclick="preset(4.0)">通常上 <small>σ4.0</small></button>
+      <button class="chip" onclick="preset(5.0)">高ボラ <small>σ5.0</small></button>
+      <button class="chip" onclick="preset(6.5)">危機 <small>σ6.5</small></button>
+    </div>
+    <p class="note">σは対象ペアの相対価格の実現ボラ（14〜30日）。ETH/USDCならETHのUSD建てσ、WETH/cbBTCならETH/BTC比のσ（通常はUSD建てより小さい）。CSVから出る実測σは<b>そのCSV銘柄のUSD建てσ</b>であり、相対価格ペア（WETH/cbBTC等）には使用しない。読込結果は保存されず、ページを閉じると消える。</p>
+  </fieldset>
+</div>
+
+<div class="card" id="paneB" hidden>
+  <fieldset>
+    <legend>入力 ── 検証（アプリのMin/Maxを転記）</legend>
+    <div class="grid">
+      <div class="field"><label for="bMin">Min価格</label><input id="bMin" type="number" step="any" placeholder="例 1800"></div>
+      <div class="field"><label for="bMax">Max価格</label><input id="bMax" type="number" step="any" placeholder="例 2029"></div>
+      <div class="field"><label for="bP">現在価格（任意）</label><input id="bP" type="number" step="any" placeholder="空欄可"></div>
+      <div class="field"><label for="bS">日次σ %</label><input id="bS" type="number" value="4.0" step="0.1"></div>
+    </div>
+  </fieldset>
+</div>
+
+<div class="card" id="paneC" hidden>
+  <fieldset>
+    <legend>入力 ── 中期設計（実測経路の経験分位でレンジを決める）</legend>
+    <div class="csvbar" style="margin-top:0;padding-top:0;border-top:0">
+      <label for="cFileN">資産CSV（分子・CMC日足・必ずUSD建て）</label>
+      <input id="cFileN" type="file" accept=".csv,text/csv">
+      <div id="cStatN" class="csvsum" hidden></div>
+      <label for="cFileD" style="margin-top:9px">相対ペア用CSV（分母・任意。読込むと 分子÷分母 の相対価格で設計。例: ETH÷BTC）</label>
+      <input id="cFileD" type="file" accept=".csv,text/csv">
+      <div id="cStatD" class="csvsum" hidden></div>
+    </div>
+    <div class="grid" style="margin-top:10px">
+      <div class="field"><label for="cH">保有期間（日）</label><select id="cH"><option>90</option><option>180</option><option selected>365</option><option>730</option></select></div>
+      <div class="field"><label for="cCov">被覆率（上下独立タイル）</label><select id="cCov"><option value="0.8">80%</option><option value="0.9" selected>90%</option><option value="0.95">95%</option></select></div>
+      <div class="field"><label for="cFrom">エントリー母集団</label><select id="cFrom"><option value="2022-01-01" selected>2022年以降</option><option value="">全期間</option></select></div>
+      <div class="field"><label for="cP">現在価格（既定＝CSV最新Open）</label><input id="cP" type="number" step="any"></div>
+      <div class="field"><label for="cFee">手数料階層</label><select id="cFee"><option value="0.0001">0.01%</option><option value="0.0005" selected>0.05%</option><option value="0.003">0.3%</option><option value="0.01">1.0%</option></select></div>
+      <div class="field"><label for="cUtil">想定インレンジ稼働率 %</label><input id="cUtil" type="number" value="80" step="5"></div>
+      <div class="field"><label for="cVol">Vol24h（$・任意）</label><input id="cVol" type="number" placeholder="GeckoTerminal値" step="any"></div>
+      <div class="field"><label for="cTvl">TVL（$・任意）</label><input id="cTvl" type="number" placeholder="GeckoTerminal値" step="any"></div>
+    </div>
+    <div class="gpbar">
+      <label for="gpAddrC">プール実測値の自動取得（GeckoTerminal・④の手数料・Vol24h・TVLへ反映）</label>
+      <div class="gprow">
+        <select id="gpNetC"><option value="base" selected>base</option><option value="eth">eth</option></select>
+        <input id="gpAddrC" type="text" placeholder="0x… プールアドレス" spellcheck="false">
+        <button type="button" class="gpbtn" onclick="gpGo('C')">取得</button>
+      </div>
+      <div id="gpStatC" class="csvsum" hidden></div>
+    </div>
+    <div id="cWarn" class="csvsum" hidden></div>
+    <p class="note">レンジは、指定した保有期間で過去の各エントリー日から実際に生じた最大上振れ・下振れの経験分布（上下独立の被覆率タイル）で決める概算の目安。将来の値動き・成果を保証しない。相対ペアの下抜けは全量が分子資産化する点に注意。読込データは保存されず、ページを閉じると消える。</p>
+    <div id="btBlock" hidden>
+      <div class="btlegend">バックテスト ── 対HODL比較（概算）</div>
+      <table id="btOut"></table>
+      <p class="note" id="btNote"></p>
+    </div>
+  </fieldset>
+</div>
+
+<div class="card">
+  <fieldset><legend>判定台帳</legend>
+  <table id="out"></table>
+  <div id="verdict"></div>
+  </fieldset>
+</div>
+
+<footer>
+  計算式（すべて近似・意思決定の補助）：<span class="f">① 半幅 w = k·σ·√T（上）、×スキュー（下）　② 期待滞在 T ≈ (w/σ)²　③ 集中倍率 ≈ 1/(1−(Pmin/Pmax)^¼)　④ 実効APR ≈ (Vol24h×手数料率÷TVL)×365×集中倍率×稼働率　⑤ ボラ由来コスト ≈ (σ²/8)×365×集中倍率</span><br>
+  ②は無ドリフト近似で、トレンド発生時の実滞在は短くなる。④⑤は比較用の概算であり、将来の運用成果を示唆・保証しない。レンジ外では手数料は発生しない。中期設計タブのレンジは実測経路の経験分位（上下独立タイル）であり②のガウス近似に依存しない。作成 2026-08。
+</footer>
+</div>
+
+<script>
+let MODE='A';
+const $=id=>document.getElementById(id);
+const fmt=(x,d=2)=>isFinite(x)?x.toLocaleString('ja-JP',{maximumFractionDigits:d,minimumFractionDigits:0}):'–';
+function mode(m){MODE=m;$('tabA').setAttribute('aria-selected',m==='A');$('tabB').setAttribute('aria-selected',m==='B');$('paneA').hidden=m!=='A';$('paneB').hidden=m!=='B';calc();}
+function preset(s){$('aS').value=s;calc();}
+function row(k,ref,v,unit,hero){return `<tr${hero?' class="hero"':''}><td class="k">${k} <span class="ref">${ref}</span></td><td class="v">${v}<small> ${unit||''}</small></td></tr>`;}
+function drawRail(P,Pl,Pu,T){
+  const span=(Pu-Pl), pad=span*0.35, lo=Pl-pad, hi=Pu+pad, X=v=>2+96*(v-lo)/(hi-lo);
+  const b=$('band'); b.style.left=X(Pl)+'%'; b.style.width=(X(Pu)-X(Pl))+'%';
+  $('tkL').style.left=X(Pl)+'%'; $('tkS').style.left=X(P)+'%'; $('tkU').style.left=X(Pu)+'%';
+  $('lbL').style.left=X(Pl)+'%'; $('lbL').innerHTML='<b>'+fmt(Pl)+'</b><br>下限';
+  $('lbS').style.left=X(P)+'%';  $('lbS').innerHTML='<b>'+fmt(P)+'</b><br>現在';
+  $('lbU').style.left=X(Pu)+'%'; $('lbU').innerHTML='<b>'+fmt(Pu)+'</b><br>上限';
+  const tb=$('tbadge'); tb.textContent='期待滞在 '+(isFinite(T)?fmt(T,1):'–')+'日';
+  tb.className='tbadge'+(T<3?' warn':'');
+}
+function verdict(T,feeAPR,costAPR){
+  let cls='v-ok',msg='設計妥当：滞在目安が確保されている。';
+  if(T<3){cls='v-bad';msg='毎日再設定ゾーン（滞在'+fmt(T,1)+'日）。1〜2月の反復と同型。幅・k・Tを引き上げること。';}
+  else if(T<7){cls='v-warn';msg='短滞在（'+fmt(T,1)+'日）。高ボラ移行時は即・毎日再設定化する。余裕を推奨。';}
+  if(isFinite(feeAPR)&&isFinite(costAPR)){
+    msg+=' 手数料'+fmt(feeAPR,0)+'% vs ボラコスト'+fmt(costAPR,0)+'%（年率概算）→ '+(feeAPR>costAPR?'手数料優位。':'コスト優位＝この幅・この流動性では割に合わない。');
+    if(feeAPR<=costAPR&&cls==='v-ok')cls='v-warn';
+  }
+  $('verdict').className='verdict '+cls; $('verdict').textContent=msg;
+}
+function calc(){
+  let html='';
+  if(MODE==='A'){
+    const P=+$('aP').value,s=+$('aS').value/100,T=+$('aT').value,k=+$('aK').value,sk=+$('aSkew').value;
+    const fee=+$('aFee').value,V=+$('aVol').value,L=+$('aTvl').value,u=+$('aUtil').value/100;
+    if(!(P>0&&s>0&&T>0&&k>0&&sk>0)){$('out').innerHTML='';verdict(NaN);return;}
+    const wu=k*s*Math.sqrt(T), wd=sk*wu, Pl=P*(1-wd), Pu=P*(1+wu);
+    if(Pl<=0){$('out').innerHTML='<tr><td class="k">下限が0以下です。スキューかσを見直してください。</td><td class="v"></td></tr>';verdict(NaN);return;}
+    const conc=1/(1-Math.pow(Pl/Pu,0.25));
+    const Tup=(wu/s)**2, Tdn=(wd/s)**2, Test=Math.min(Tup,Tdn);
+    let feeAPR=NaN,costAPR=NaN;
+    if(V>0&&L>0){feeAPR=(V*fee/L)*365*100*conc*u; costAPR=(s*s/8)*365*100*conc;}
+    html+=row('推奨レンジ','①',fmt(Pl)+' 〜 '+fmt(Pu),'', true);
+    html+=row('半幅（上／下）','①','+'+fmt(wu*100,1)+'% ／ −'+fmt(wd*100,1)+'%','');
+    html+=row('集中倍率（対フルレンジ）','③','約 '+fmt(conc,1),'倍');
+    html+=row('期待滞在（先に触れる側）','②',fmt(Test,1),'日');
+    html+=row('　└ 上抜けまで／下抜けまで','②',fmt(Tup,0)+' ／ '+fmt(Tdn,0),'日');
+    if(isFinite(feeAPR)){html+=row('実効APR（稼働率'+fmt(u*100,0)+'%込）','④',fmt(feeAPR,0),'%／年 概算');html+=row('ボラ由来コスト','⑤',fmt(costAPR,0),'%／年 概算');}
+    $('out').innerHTML=html; drawRail(P,Pl,Pu,Test); verdict(Test,feeAPR,costAPR);
+  }else{
+    const mn=+$('bMin').value,mx=+$('bMax').value,s=+$('bS').value/100;
+    let P=+$('bP').value;
+    if(!(mn>0&&mx>mn)){$('out').innerHTML='<tr><td class="k">MinとMaxを入力（Min＜Max）</td><td class="v"></td></tr>';verdict(NaN);return;}
+    const mid=Math.sqrt(mn*mx); if(!(P>0))P=mid;
+    const w=Math.sqrt(mx/mn)-1, conc=1/(1-Math.pow(mn/mx,0.25));
+    const wu=mx/P-1, wd=1-mn/P;
+    const T=(s>0)?(Math.min(Math.abs(wu),Math.abs(wd))/s)**2:NaN;
+    html+=row('実効半幅（幾何）','','±'+fmt(w*100,1)+'%','', true);
+    html+=row('幾何中心','',fmt(mid),'');
+    html+=row('現在から上限／下限まで','','+'+fmt(wu*100,1)+'% ／ −'+fmt(wd*100,1)+'%','');
+    html+=row('集中倍率（対フルレンジ）','③','約 '+fmt(conc,1),'倍');
+    if(isFinite(T))html+=row('このσでの期待滞在','②',fmt(T,1),'日');
+    $('out').innerHTML=html; drawRail(P,mn,mx,T); verdict(T,NaN,NaN);
+  }
+}
+/* ==== v1.1 実測σ（CMC日足CSV）ここから ==== */
+/* 規約（handoff_spec §5①）: CMCのUTC日足バー＝9:00 JST〜翌9:00 JSTの1日。
+   σは当日Open（=9:00 JST値）の対数リターン、ATRはバーH/L/Cで計算（Wilder14・EA-Risk-Monitor同一定義）。 */
+const DAY_MS=86400000;
+function parseCmcCsv(text){
+  const strip=s=>s.replace(/^"+|"+$/g,'').trim();
+  const lines=text.replace(/^\uFEFF/,'').split(/\r?\n/).filter(l=>l.trim()!=='');
+  if(lines.length<2)return{err:'データ行がありません。'};
+  const head=lines[0].split(';').map(strip);
+  if(head.length<5)return{err:'セミコロン区切りのヘッダーを認識できません。CMCの日足エクスポート形式（§5③）を確認。'};
+  const need=['timeOpen','open','high','low','close'], idx={};
+  for(const k of need){idx[k]=head.indexOf(k); if(idx[k]<0)return{err:'必須列がありません: '+k};}
+  const rows=[],seen=new Set(),warn=[];let dup=0,bad=0;
+  for(let i=1;i<lines.length;i++){
+    const c=lines[i].split(';').map(strip);
+    const t=Date.parse(c[idx.timeOpen]);
+    const o=+c[idx.open],h=+c[idx.high],l=+c[idx.low],cl=+c[idx.close];
+    if(!isFinite(t)||!(o>0&&h>0&&l>0&&cl>0)||h<l){bad++;continue;}
+    const day=Math.floor(t/DAY_MS);
+    if(seen.has(day)){dup++;continue;}
+    seen.add(day); rows.push({day,o,h,l,c:cl});
+  }
+  if(bad>0)warn.push('数値・日付の不正 '+bad+'行を除外');
+  if(dup>0)warn.push('重複日付 '+dup+'行を除外（先勝ち）');
+  rows.sort((a,b)=>a.day-b.day);
+  if(rows.length<15)return{err:'有効データが'+rows.length+'日分です（最低15日分が必要）。'};
+  return{rows,warn};
+}
+function sampleStdev(a){const n=a.length,m=a.reduce((s,x)=>s+x,0)/n;return Math.sqrt(a.reduce((s,x)=>s+(x-m)*(x-m),0)/(n-1));}
+function computeRealized(rows,warn){
+  const rets=[];let gap=0;
+  for(let i=1;i<rows.length;i++){
+    if(rows[i].day-rows[i-1].day===1)rets.push(Math.log(rows[i].o/rows[i-1].o));
+    else gap++;
+  }
+  if(gap>0)warn.push('日付ギャップまたぎ '+gap+'件のリターンを除外');
+  const s14=rets.length>=14?sampleStdev(rets.slice(-14))*100:NaN;
+  const s30=rets.length>=30?sampleStdev(rets.slice(-30))*100:NaN;
+  const trs=[];
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i],p=rows[i-1];
+    const tr=(r.day-p.day===1)?Math.max(r.h-r.l,Math.abs(r.h-p.c),Math.abs(r.l-p.c)):(r.h-r.l);
+    trs.push({tr,c:r.c});
+  }
+  let atrPct=NaN,pct=NaN,base=0;
+  if(trs.length>=14){
+    let a=0;for(let i=0;i<14;i++)a+=trs[i].tr;a/=14;
+    const series=[a/trs[13].c*100];
+    for(let i=14;i<trs.length;i++){a=(13*a+trs[i].tr)/14;series.push(a/trs[i].c*100);}
+    atrPct=series[series.length-1];
+    const win=series.slice(-365); base=win.length;
+    pct=win.filter(x=>x<=atrPct).length/win.length*100;
+  }
+  return{s14,s30,atrPct,pct,base,
+    from:new Date(rows[0].day*DAY_MS).toISOString().slice(0,10),
+    to:new Date(rows[rows.length-1].day*DAY_MS).toISOString().slice(0,10),
+    n:rows.length,nRet:rets.length};
+}
+/* --- v1.2 中期設計（経験分位）純関数 --- */
+const dayISO=d=>new Date(d*86400000).toISOString().slice(0,10);
+function buildRelSeries(numRows,denRows){
+  if(!denRows||!denRows.length) return numRows.map(r=>({day:r.day,o:r.o}));
+  const dm=new Map(denRows.map(r=>[r.day,r.o]));
+  return numRows.filter(r=>dm.has(r.day)).map(r=>({day:r.day,o:r.o/dm.get(r.day)}));
+}
+function sigmaDailyPct(ser,fromISO){
+  const rets=[];
+  for(let i=1;i<ser.length;i++){
+    if(ser[i].day-ser[i-1].day!==1)continue;
+    if(fromISO&&dayISO(ser[i].day)<fromISO)continue;
+    rets.push(Math.log(ser[i].o/ser[i-1].o));
+  }
+  return rets.length>=2?sampleStdev(rets)*100:NaN;
+}
+function excQuantiles(ser,H,cov,fromISO){
+  const up=[],dn=[];
+  for(let i=0;i+H<ser.length;i++){
+    if(fromISO&&dayISO(ser[i].day)<fromISO)continue;
+    const e=ser[i].o;let mx=0,mn=1e18;
+    for(let j=i+1;j<=i+H;j++){const v=ser[j].o;if(v>mx)mx=v;if(v<mn)mn=v;}
+    up.push(mx/e-1);dn.push(1-mn/e);
+  }
+  if(up.length<20)return{err:'有効な窓が'+up.length+'個で不足（最低20個）。保有期間・母集団・データ期間を見直す。'};
+  const q=(a,f)=>{const s=a.slice().sort((x,y)=>x-y);return s[Math.floor(f*(s.length-1))];};
+  return{n:up.length,d:q(dn,cov),u:q(up,cov),d50:q(dn,.5),u50:q(up,.5)};
+}
+/* --- v1.4 対HODL比較バックテスト 純関数 --- */
+/* V3ポジションの単位流動性あたり評価額（分母建て）。sは[sa,sb]にクランプ、境界で連続 */
+function v3ValuePerL(P,sa,sb){const s=Math.min(Math.max(Math.sqrt(P),sa),sb);return P*(sb-s)/(s*sb)+(s-sa);}
+/* 履歴再生: 日次Openで評価、バンド外の日は即日・同率(d,u)で再センタリング（スワップコスト0仮定）。
+   手数料はインレンジ日のみ 当日評価額×feeDaily×conc を単利加算（再投資しない） */
+function backtestBand(ser,startIdx,d,u,feeDaily,conc){
+  const P0=ser[startIdx].o;
+  if(!(d+u>0)||!(P0>0))return{err:'バンド幅が不正'};
+  let sa=Math.sqrt(P0*(1-d)),sb=Math.sqrt(P0*(1+u));
+  let Lq=1/v3ValuePerL(P0,sa,sb);
+  let V=1,feeSum=0,resU=0,resD=0,inR=0,days=0;
+  for(let t=startIdx+1;t<ser.length;t++){
+    const P=ser[t].o;days++;
+    V=Lq*v3ValuePerL(P,sa,sb);
+    const Pl=sa*sa,Pu=sb*sb;
+    if(P>=Pl&&P<=Pu){inR++;feeSum+=V*feeDaily*conc;}
+    else{
+      if(P>Pu)resU++;else resD++;
+      sa=Math.sqrt(P*(1-d));sb=Math.sqrt(P*(1+u));
+      Lq=V/v3ValuePerL(P,sa,sb);
+    }
+  }
+  const Pend=ser[ser.length-1].o;
+  return{lpEx:V,lpFee:V+feeSum,feeSum,h100:Pend/P0,h5050:0.5+0.5*Pend/P0,
+         resU,resD,util:days?inR/days:0,days};
+}
+/* --- v1.5 GeckoTerminal応答の解析 純関数 --- */
+function parsePoolJson(j){
+  const a=j&&j.data&&j.data.attributes;
+  if(!a)return{err:'レスポンス形式を認識できません。'};
+  const vol=+(a.volume_usd&&a.volume_usd.h24), tvl=+a.reserve_in_usd;
+  if(!(vol>0&&tvl>0))return{err:'Vol24h/TVLが取得できないか0以下です。プールの状態を確認。'};
+  let fee=null;const m=/([0-9.]+)\s*%/.exec(a.name||'');
+  if(m){const f=parseFloat(m[1])/100;for(const v of [0.0001,0.0005,0.003,0.01])if(Math.abs(f-v)<1e-12)fee=v;}
+  return{name:a.name||'(名称不明)',vol,tvl,fee,
+         priceQuote:isFinite(+a.base_token_price_quote_token)?+a.base_token_price_quote_token:null};
+}
+/* ==== v1.1 実測σ ここまで（純関数） ==== */
+let CSVR=null;
+const PRESETS=[[2.2,'静穏'],[3.0,'通常下'],[4.0,'通常上'],[5.0,'高ボラ'],[6.5,'危機']];
+function chipHtml(v,lab,meas){return '<button class="chip'+(meas?' measured':'')+'" onclick="preset('+v+')">'+lab+' <small>σ'+v+'</small></button>';}
+function rebuildChips(){
+  let html='';
+  if(CSVR&&isFinite(CSVR.s14)){
+    html+=chipHtml(+CSVR.s14.toFixed(2),'実測14日',true);
+    if(isFinite(CSVR.s30))html+=chipHtml(+CSVR.s30.toFixed(2),'実測30日',true);
+    PRESETS.map(p=>({p,d:Math.abs(p[0]-CSVR.s14)})).sort((a,b)=>a.d-b.d).slice(0,3)
+      .map(x=>x.p).sort((a,b)=>a[0]-b[0]).forEach(p=>{html+=chipHtml(p[0],p[1],false);});
+  }else{
+    PRESETS.forEach(p=>{html+=chipHtml(p[0],p[1],false);});
+  }
+  $('chips').innerHTML=html;
+}
+function showCsvSum(html,isErr){const el=$('csvSum');el.hidden=false;el.className='csvsum'+(isErr?' err':'');el.innerHTML=html;}
+$('csvFile').addEventListener('change',e=>{
+  const f=e.target.files&&e.target.files[0]; if(!f)return;
+  const fr=new FileReader();
+  fr.onerror=()=>showCsvSum('ファイルを読み込めませんでした。',true);
+  fr.onload=()=>{
+    const p=parseCmcCsv(String(fr.result));
+    if(p.err){CSVR=null;rebuildChips();showCsvSum(p.err,true);return;}
+    const r=computeRealized(p.rows,p.warn);
+    if(!isFinite(r.s14)){CSVR=null;rebuildChips();showCsvSum('有効リターンが不足し、σ14を算出できません（'+r.nRet+'件）。',true);return;}
+    CSVR=r;rebuildChips();
+    const f2=x=>isFinite(x)?x.toFixed(2):'–';
+    let html='期間 <span class="num">'+r.from+' 〜 '+r.to+'</span>（全'+r.n+'日・有効リターン'+r.nRet+'件）<br>'
+      +'σ14 <span class="num">'+f2(r.s14)+'%</span>／σ30 <span class="num">'+f2(r.s30)+'%</span>'
+      +'<small>（日次・当日Open＝9:00 JST値の対数リターン）</small><br>'
+      +'ATR%14（Wilder） <span class="num">'+f2(r.atrPct)+'%</span> ── '
+      +(r.base>=365?'365日':'全'+r.base+'日')+'タイル <span class="num">'+(isFinite(r.pct)?r.pct.toFixed(0):'–')+'%</span>の目安';
+    if(p.warn.length)html+='<br><span class="warnline">△ '+p.warn.join('／')+'</span>';
+    showCsvSum(html,false);
+  };
+  fr.readAsText(f);
+});
+/* ==== v1.2 中期設計モード（UI接続） ==== */
+let CN=null,CD=null,SER=null;
+const EXDN0=$('exdn').innerHTML, EXUP0=$('exup').innerHTML;
+const fmtP=x=>x>=1?fmt(x):String(+x.toPrecision(5));
+function setMode(m){
+  mode(m);                             // コアmode(): 'C'ではA/B両ペインが非表示になる
+  $('paneC').hidden=m!=='C';
+  $('tabC').setAttribute('aria-selected',m==='C');
+  if(m==='C'){$('exdn').textContent='▼下抜け＝分子資産100%';$('exup').textContent='上抜け＝分母側100%▲';calcC();}
+  else{$('exdn').innerHTML=EXDN0;$('exup').innerHTML=EXUP0;}
+}
+function csvStat(el,parsed){
+  el.hidden=false;
+  if(parsed.err){el.className='csvsum err';el.textContent=parsed.err;return;}
+  const r=parsed.rows,last=r[r.length-1];
+  el.className='csvsum';
+  el.innerHTML='最新Open <span class="num">'+fmtP(last.o)+'</span>（'+dayISO(last.day)+'）・'
+    +r.length+'日分（'+dayISO(r[0].day)+'〜）'
+    +(parsed.warn.length?'<br><span class="warnline">△ '+parsed.warn.join('／')+'</span>':'');
+}
+function loadC(slot,file){
+  const fr=new FileReader();
+  fr.onerror=()=>csvStat($(slot==='N'?'cStatN':'cStatD'),{err:'ファイルを読み込めませんでした。'});
+  fr.onload=()=>{
+    const p=parseCmcCsv(String(fr.result));
+    csvStat($(slot==='N'?'cStatN':'cStatD'),p);
+    if(slot==='N')CN=p.err?null:p; else CD=p.err?null:p;
+    SER=CN?buildRelSeries(CN.rows,CD?CD.rows:null):null;
+    if(SER&&SER.length)$('cP').value=+SER[SER.length-1].o.toPrecision(6);
+    calcC();
+  };
+  fr.readAsText(file);
+}
+function calcC(){
+  if(MODE!=='C')return;
+  const out=$('out'),warnEl=$('cWarn');warnEl.hidden=true;
+  if(!SER||SER.length<2){$('btBlock').hidden=true;out.innerHTML='<tr><td class="k">資産CSV（分子）を読み込んでください。相対ペアは分母CSVも読込。</td><td class="v"></td></tr>';$('verdict').className='';$('verdict').textContent='';return;}
+  const H=+$('cH').value, cov=+$('cCov').value, from=$('cFrom').value||null;
+  let P=+$('cP').value; if(!(P>0))P=SER[SER.length-1].o;
+  const warns=[];
+  warns.push((CD?'相対価格モード（分子÷分母・共通日 ':'単一資産モード（')+SER.length+'日: '+dayISO(SER[0].day)+'〜'+dayISO(SER[SER.length-1].day)+'）');
+  if(CD&&SER[SER.length-1].o>1)warns.push('△ 比率が1を超えています。分子と分母のファイルが逆の可能性（各スロットの最新Open表示で要確認）');
+  const e=excQuantiles(SER,H,cov,from);
+  if(e.err){$('btBlock').hidden=true;out.innerHTML='<tr><td class="k">'+e.err+'</td><td class="v"></td></tr>';warnEl.hidden=false;warnEl.className='csvsum';warnEl.innerHTML=warns.join('<br>');$('verdict').className='';$('verdict').textContent='';return;}
+  if(e.n<H+90)warns.push('△ 窓数'+e.n+'個は保有期間に対して少なく、分位の統計的信頼性が低い');
+  const d=Math.max(e.d,0),u=Math.max(e.u,0);
+  const Pl=P*(1-d),Pu=P*(1+u);
+  const conc=1/(1-Math.pow(Pl/Pu,0.25));
+  const sd=sigmaDailyPct(SER,from), s=sd/100;
+  const Tref=(s>0)?(Math.min(d,u)/s)**2:NaN;
+  const fee=+$('cFee').value,V=+$('cVol').value,L=+$('cTvl').value,ut=+$('cUtil').value/100;
+  let feeAPR=NaN,costAPR=NaN;
+  if(V>0&&L>0&&s>0){feeAPR=(V*fee/L)*365*100*conc*ut;costAPR=(s*s/8)*365*100*conc;}
+  let html='';
+  html+=row('推奨レンジ（経験分位）','実測',fmtP(Pl)+' 〜 '+fmtP(Pu),'',true);
+  html+=row('上下幅','','+'+fmt(u*100,1)+'% ／ −'+fmt(d*100,1)+'%','');
+  html+=row('集中倍率（対フルレンジ）','③','約 '+fmt(conc,1),'倍');
+  html+=row('経験分布','',H+'日×'+fmt(cov*100,0)+'%被覆・窓'+e.n+'個'+(from?'（2022年以降）':'（全期間）'),'');
+  html+=row('中央値バンド（参考）','','+'+fmt(Math.max(e.u50,0)*100,1)+'% ／ −'+fmt(Math.max(e.d50,0)*100,1)+'%','');
+  html+=row('日次σ（母集団実測）','',fmt(sd,2),'%');
+  if(isFinite(Tref))html+=row('②式の滞在目安（参考）','②',fmt(Tref,0),'日');
+  if(isFinite(feeAPR)){html+=row('実効APR（稼働率'+fmt(ut*100,0)+'%込）','④',fmt(feeAPR,0),'%／年 概算');html+=row('ボラ由来コスト','⑤',fmt(costAPR,0),'%／年 概算');}
+  out.innerHTML=html;
+  warnEl.hidden=false;warnEl.className='csvsum';warnEl.innerHTML=warns.join('<br>');
+  drawRail(P,Pl,Pu,Tref);verdict(Tref,feeAPR,costAPR);
+  renderBT(from,d,u,conc,fee,V,L);
+}
+function renderBT(from,d,u,conc,fee,V,L){
+  const blk=$('btBlock');
+  let s0=0;
+  if(from){s0=SER.findIndex(r=>dayISO(r.day)>=from);if(s0<0){blk.hidden=true;return;}}
+  if(SER.length-s0<61||!(d+u>0)){blk.hidden=true;return;}
+  const feeDaily=(V>0&&L>0)?V*fee/L:0;
+  const b=backtestBand(SER,s0,d,u,feeDaily,conc);
+  if(b.err){blk.hidden=true;return;}
+  const pct=x=>fmt(x*100,1);
+  let h='';
+  if(feeDaily>0)h+=row('LP（手数料込み）','',pct(b.lpFee),'',true);
+  h+=row('LP（手数料'+(feeDaily>0?'抜き':'は④未入力のため対象外')+'）','',pct(b.lpEx),'',feeDaily<=0);
+  h+=row('50:50保有（リバランスなし）','',pct(b.h5050),'');
+  h+=row('100%分子保有','',pct(b.h100),'');
+  if(feeDaily>0)h+=row('手数料の累計寄与','','+'+pct(b.feeSum),'pt');
+  h+=row('再設定回数（上／下）','',b.resU+' ／ '+b.resD,'回');
+  h+=row('実測インレンジ稼働率','',fmt(b.util*100,0),'%');
+  h+=row('検証期間','',dayISO(SER[s0].day)+'〜'+dayISO(SER[SER.length-1].day)+'・'+b.days+'日','');
+  $('btOut').innerHTML=h;
+  $('btNote').textContent='期末評価はエントリー時＝100。本結果は、同じ履歴からバンド幅を導き同じ履歴に適用した自己適用の概算（look-ahead）であり、将来の成績を示唆・保証しない。'
+    +(feeDaily>0?'手数料はVol24h・TVL・集中倍率が期間中一定と仮定した単利概算。':'④のVol24h/TVLが未入力のため、手数料は計算に含まれていない。')
+    +'再設定は日次Openのバンド外判定で即日・同率再センタリング（スワップコスト・ガス・スリッページはゼロと仮定）。P3の段階ルールは含まない。';
+  blk.hidden=false;
+}
+$('cFileN').addEventListener('change',ev=>{const f=ev.target.files&&ev.target.files[0];if(f)loadC('N',f);});
+$('cFileD').addEventListener('change',ev=>{const f=ev.target.files&&ev.target.files[0];if(f)loadC('D',f);});
+/* v1.5 プール自動取得 */
+function applyPool(p){
+  ['aVol','cVol'].forEach(id=>$(id).value=Math.round(p.vol));
+  ['aTvl','cTvl'].forEach(id=>$(id).value=Math.round(p.tvl));
+  if(p.fee!==null)['aFee','cFee'].forEach(id=>$(id).value=String(p.fee));
+  calc();calcC();
+}
+async function fetchPool(net,addr){
+  addr=(addr||'').trim();
+  if(!/^0x[0-9a-fA-F]{40}$/.test(addr))return{err:'アドレス形式が不正です（0x＋40桁の16進数）。'};
+  const ctl=new AbortController();const tm=setTimeout(()=>ctl.abort(),10000);
+  let res;
+  try{res=await fetch('https://api.geckoterminal.com/api/v2/networks/'+net+'/pools/'+addr,{signal:ctl.signal,headers:{accept:'application/json'}});}
+  catch(err){clearTimeout(tm);return{err:'接続できませんでした（CORS制限・ネットワーク・タイムアウトのいずれか）。手入力を継続してください。Claude.aiのプレビュー内では外部APIがブロックされるため、HTMLをダウンロードしてブラウザで開くと動作します。'};}
+  clearTimeout(tm);
+  if(res.status===404)return{err:'プールが見つかりません（404）。アドレスとネットワークを確認。'};
+  if(res.status===429)return{err:'レート制限に達しました（429）。1分ほど待って再試行。'};
+  if(!res.ok)return{err:'取得に失敗しました（HTTP '+res.status+'）。'};
+  let j;try{j=await res.json();}catch(err){return{err:'応答の解析に失敗しました。'};}
+  return parsePoolJson(j);
+}
+function gpStat(html,isErr){['gpStatA','gpStatC'].forEach(id=>{const el=$(id);el.hidden=false;el.className='csvsum'+(isErr?' err':'');el.innerHTML=html;});}
+async function gpGo(w){
+  gpStat('取得中…',false);
+  const p=await fetchPool($('gpNet'+w).value,$('gpAddr'+w).value);
+  if(p.err){gpStat(p.err,true);return;}
+  applyPool(p);
+  gpStat('<span class="num">'+p.name+'</span>／Vol24h $'+fmt(p.vol,0)+'／TVL $'+fmt(p.tvl,0)
+    +'／手数料 '+(p.fee!==null?(p.fee*100)+'%':'名称から判定不能（手動選択のまま）')
+    +(p.priceQuote!==null?'／プール価格 '+String(+p.priceQuote.toPrecision(6)):'')
+    +'<br><small>'+new Date().toLocaleString('ja-JP')+' 取得・data via GeckoTerminal。取得値は手入力で上書き可。</small>',false);
+}
+['cH','cCov','cFrom','cP','cFee','cVol','cTvl','cUtil'].forEach(id=>$(id).addEventListener('input',calcC));
+['aP','aS','aT','aK','aSkew','aFee','aVol','aTvl','aUtil','bMin','bMax','bP','bS'].forEach(id=>$(id).addEventListener('input',calc));
+calc();
+</script>
+</body>
+</html>
