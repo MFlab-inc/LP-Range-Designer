@@ -212,6 +212,11 @@ details.glossary[open] summary::before{content:'▾ '}
       <div class="field"><label for="bP">現在価格（任意）</label><input id="bP" type="number" step="any" placeholder="空欄可"></div>
       <div class="field"><label for="bS">日次σ %</label><input id="bS" type="number" value="4.0" step="0.1"></div>
     </div>
+    <div class="gpbar" id="p3upBar">
+      <label for="bUpDays">P3: 上抜け段階再展開 ── 上抜け継続日数（9:00 JST終値ベース・直近から連続、0=レンジ内）</label>
+      <div class="gprow"><input id="bUpDays" type="number" step="1" min="0" placeholder="0"></div>
+      <div id="p3upOut" class="csvsum"></div>
+    </div>
   </fieldset>
 </div>
 
@@ -453,6 +458,15 @@ function parsePoolJson(j){
   return{name:a.name||'(名称不明)',vol,tvl,fee,
          priceQuote:isFinite(+a.base_token_price_quote_token)?+a.base_token_price_quote_token:null};
 }
+/* --- v1.6 P3上抜け段階再展開タイマー 純関数（handoff_spec §7） --- */
+/* 上抜け確定1日目→50%再展開の目安、2日目以降継続→残り50%再展開の目安。非数値・負数は0（レンジ内）扱い、
+   小数は切り捨て。レンジ内へ戻ったらdays=0を渡すことで完全リセット（1日目分の巻き戻し提案はしない）。 */
+function p3UpStage(rawDays){
+  const n=Math.floor(Math.max(0,Number(rawDays)||0));
+  if(n<=0)return{days:0,label:'レンジ内（上抜けなし、または復帰済み）',warn:false};
+  if(n===1)return{days:1,label:'50%再展開の目安（上抜け確定1日目）',warn:true};
+  return{days:n,label:'残り50%再展開の目安（上抜け'+n+'日目・継続中）',warn:true};
+}
 /* ==== v1.1 実測σ ここまで（純関数） ==== */
 let CSVR=null;
 const PRESETS=[[2.2,'静穏'],[3.0,'通常下'],[4.0,'通常上'],[5.0,'高ボラ'],[6.5,'危機']];
@@ -501,6 +515,16 @@ function setMode(m){
   $('tabC').setAttribute('aria-selected',m==='C');
   if(m==='C'){$('exdn').textContent='▼下抜け＝分子資産100%';$('exup').textContent='上抜け＝分母側100%▲';calcC();}
   else{$('exdn').innerHTML=EXDN0;$('exup').innerHTML=EXUP0;}
+  if(m==='B')calcP3Up();
+}
+/* v1.6 P3上抜け段階再展開タイマー（UI接続・非コア） */
+function calcP3Up(){
+  const s=p3UpStage($('bUpDays').value);
+  $('p3upOut').innerHTML=(s.warn?'<span class="warnline">'+s.label+'</span>':s.label)
+    +'<br><small>下抜け（レンジ復帰まで再センタリング禁止）とは非対称な、上抜け専用の段階的目安。'
+    +'表示は新規の上抜けエピソード前提の目安。ツールは再展開の実行状況を保持しないため、'
+    +'既に一部再展開済みの場合は残余資金に読み替えて適用すること。'
+    +'単一HTML版は開いた時点の状態判定表示であり、通知機能ではない。</small>';
 }
 function csvStat(el,parsed){
   el.hidden=false;
@@ -618,7 +642,9 @@ async function gpGo(w){
 }
 ['cH','cCov','cFrom','cP','cFee','cVol','cTvl','cUtil'].forEach(id=>$(id).addEventListener('input',calcC));
 ['aP','aS','aT','aK','aSkew','aFee','aVol','aTvl','aUtil','bMin','bMax','bP','bS'].forEach(id=>$(id).addEventListener('input',calc));
+$('bUpDays').addEventListener('input',calcP3Up);
 calc();
+calcP3Up();
 </script>
 </body>
 </html>
