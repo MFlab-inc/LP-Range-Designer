@@ -151,6 +151,44 @@ test('parsePoolJson: Vol/TVLが0以下やレスポンス欠落はエラー', () 
   assert.ok(fn.parsePoolJson({ data: { attributes: { volume_usd: { h24: 0 }, reserve_in_usd: 100 } } }).err);
 });
 
+test('p3UpStage: days=0はレンジ内表示', () => {
+  const s = fn.p3UpStage(0);
+  assert.equal(s.days, 0);
+  assert.equal(s.warn, false);
+  assert.match(s.label, /レンジ内/);
+});
+
+test('p3UpStage: days=1は50%再展開の目安（1日目）', () => {
+  const s = fn.p3UpStage(1);
+  assert.equal(s.days, 1);
+  assert.equal(s.warn, true);
+  assert.match(s.label, /50%再展開/);
+  assert.doesNotMatch(s.label, /残り/);
+});
+
+test('p3UpStage: days=2以上は残り50%再展開の目安（継続）', () => {
+  const s2 = fn.p3UpStage(2);
+  assert.equal(s2.days, 2);
+  assert.match(s2.label, /残り50%再展開/);
+  const s5 = fn.p3UpStage(5);
+  assert.equal(s5.days, 5);
+  assert.match(s5.label, /残り50%再展開/);
+});
+
+test('p3UpStage: 負数・非数値・空文字は0（レンジ内）扱い', () => {
+  assert.equal(fn.p3UpStage(-3).days, 0);
+  assert.equal(fn.p3UpStage('abc').days, 0);
+  assert.equal(fn.p3UpStage('').days, 0);
+  assert.equal(fn.p3UpStage(undefined).days, 0);
+  assert.equal(fn.p3UpStage(NaN).days, 0);
+});
+
+test('p3UpStage: 小数は切り捨て', () => {
+  assert.equal(fn.p3UpStage(1.9).days, 1);
+  assert.equal(fn.p3UpStage(2.9).days, 2);
+  assert.equal(fn.p3UpStage('2.1').days, 2);
+});
+
 test('parsePoolJson: 既知の手数料階層以外はfee=null', () => {
   const p = fn.parsePoolJson({
     data: { attributes: { name: 'FOO/BAR 2.5%', volume_usd: { h24: 1 }, reserve_in_usd: 1 } },

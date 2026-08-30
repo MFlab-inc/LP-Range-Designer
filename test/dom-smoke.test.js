@@ -110,6 +110,28 @@ test('gpGo: アドレス形式不正はfetchを呼ばずエラー表示', async 
   assert.match(env.get('gpStatA').innerHTML, /アドレス形式/);
 });
 
+test('P3上抜けタイマー: モードB表示時に既定値(空欄=0)でレンジ内表示される', () => {
+  const { env, ui } = loadUi();
+  ui.setMode('B');
+  assert.match(env.get('p3upOut').innerHTML, /レンジ内/);
+});
+
+test('P3上抜けタイマー: bUpDays入力配線でdays=1/2の表示が切り替わる', () => {
+  const { env, ui } = loadUi();
+  ui.setMode('B');
+  env.get('bUpDays').value = '1';
+  env.fire('bUpDays', 'input');
+  assert.match(env.get('p3upOut').innerHTML, /50%再展開の目安（上抜け確定1日目）/);
+
+  env.get('bUpDays').value = '2';
+  env.fire('bUpDays', 'input');
+  assert.match(env.get('p3upOut').innerHTML, /残り50%再展開の目安/);
+
+  env.get('bUpDays').value = '-5';
+  env.fire('bUpDays', 'input');
+  assert.match(env.get('p3upOut').innerHTML, /レンジ内/);
+});
+
 test('gpGo: fetch失敗時は手入力継続を促すメッセージに劣化', async () => {
   const { env, ui } = loadUi();
   env.setFetchImpl(async () => { throw new Error('network down'); });

@@ -15,7 +15,7 @@ const CORE_FUNCTION_NAMES = ['calc', 'drawRail', 'verdict', 'preset', 'mode', 'r
 const PURE_EXPORT_NAMES = [
   'parseCmcCsv', 'sampleStdev', 'computeRealized', 'dayISO',
   'buildRelSeries', 'sigmaDailyPct', 'excQuantiles',
-  'v3ValuePerL', 'backtestBand', 'parsePoolJson',
+  'v3ValuePerL', 'backtestBand', 'parsePoolJson', 'p3UpStage',
 ];
 
 function readIndexHtml() {
