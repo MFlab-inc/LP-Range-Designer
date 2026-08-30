@@ -132,6 +132,34 @@ test('P3上抜けタイマー: bUpDays入力配線でdays=1/2の表示が切り�
   assert.match(env.get('p3upOut').innerHTML, /レンジ内/);
 });
 
+test('P3下抜けチェックリスト: モードB表示時は未選択の中立表示', () => {
+  const { env, ui } = loadUi();
+  ui.setMode('B');
+  assert.match(env.get('p3dnOut').innerHTML, /選択してください/);
+});
+
+test('P3下抜けチェックリスト: state選択と相対ペアチェックの配線', () => {
+  const { env, ui } = loadUi();
+  ui.setMode('B');
+
+  env.get('bDnState').value = '1';
+  env.fire('bDnState', 'input');
+  assert.match(env.get('p3dnOut').innerHTML, /下限割れ確定/);
+  assert.doesNotMatch(env.get('p3dnOut').innerHTML, /第三の資産/);
+
+  env.get('bDnRel').checked = true;
+  env.fire('bDnRel', 'input');
+  assert.match(env.get('p3dnOut').innerHTML, /第三の資産/);
+
+  env.get('bDnState').value = '2';
+  env.fire('bDnState', 'input');
+  assert.match(env.get('p3dnOut').innerHTML, /ステーブル化済み/);
+
+  env.get('bDnState').value = '';
+  env.fire('bDnState', 'input');
+  assert.match(env.get('p3dnOut').innerHTML, /選択してください/);
+});
+
 test('gpGo: fetch失敗時は手入力継続を促すメッセージに劣化', async () => {
   const { env, ui } = loadUi();
   env.setFetchImpl(async () => { throw new Error('network down'); });

@@ -34,6 +34,7 @@ function createDomEnv() {
         className: '',
         style: {},
         files: undefined,
+        checked: false,
         _attrs: { ...(ATTR_INIT[id] ?? {}) },
         _listeners: {},
         setAttribute(k, v) { this._attrs[k] = String(v); },
