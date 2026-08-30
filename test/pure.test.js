@@ -189,6 +189,55 @@ test('p3UpStage: 小数は切り捨て', () => {
   assert.equal(fn.p3UpStage('2.1').days, 2);
 });
 
+test('p3DnStage: state=0はレンジ内表示（isRelativeに関わらず注記なし）', () => {
+  const s = fn.p3DnStage('0', false);
+  assert.equal(s.state, 0);
+  assert.equal(s.warn, false);
+  assert.match(s.label, /レンジ内/);
+  const sRel = fn.p3DnStage('0', true);
+  assert.doesNotMatch(sRel.label, /第三の資産/);
+});
+
+test('p3DnStage: state=1は下限割れ確定・ステーブル退避の指示', () => {
+  const s = fn.p3DnStage('1', false);
+  assert.equal(s.state, 1);
+  assert.equal(s.warn, true);
+  assert.match(s.label, /下限割れ確定/);
+  assert.match(s.label, /再センタリング禁止/);
+  assert.doesNotMatch(s.label, /第三の資産/);
+});
+
+test('p3DnStage: state=2はステーブル化済み・継続の指示', () => {
+  const s = fn.p3DnStage('2', false);
+  assert.equal(s.state, 2);
+  assert.equal(s.warn, true);
+  assert.match(s.label, /ステーブル化済み/);
+  assert.match(s.label, /再センタリング禁止を継続/);
+});
+
+test('p3DnStage: isRelative=trueは第三資産への退避注意が両状態に付く', () => {
+  const s1 = fn.p3DnStage('1', true);
+  assert.match(s1.label, /第三の資産/);
+  const s2 = fn.p3DnStage('2', true);
+  assert.match(s2.label, /第三の資産/);
+});
+
+test('p3DnStage: 想定外値（未選択・非対応値）は中立表示にフォールバックし、レンジ内表示は流用しない', () => {
+  const blank = fn.p3DnStage('', false);
+  assert.equal(blank.state, null);
+  assert.equal(blank.warn, false);
+  assert.match(blank.label, /選択してください/);
+  assert.doesNotMatch(blank.label, /レンジ内/);
+
+  const undef = fn.p3DnStage(undefined, false);
+  assert.equal(undef.state, null);
+  assert.match(undef.label, /選択してください/);
+
+  const bogus = fn.p3DnStage('3', false);
+  assert.equal(bogus.state, null);
+  assert.match(bogus.label, /選択してください/);
+});
+
 test('parsePoolJson: 既知の手数料階層以外はfee=null', () => {
   const p = fn.parsePoolJson({
     data: { attributes: { name: 'FOO/BAR 2.5%', volume_usd: { h24: 1 }, reserve_in_usd: 1 } },
