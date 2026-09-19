@@ -229,6 +229,22 @@ details.glossary[open] summary::before{content:'▾ '}
       <p class="note"><label><input type="checkbox" id="bDnRel"> 相対ペア（下抜け＝全量分子資産、例: ETH÷BTC等）</label></p>
       <div id="p3dnOut" class="csvsum"></div>
     </div>
+    <div class="gpbar" id="bFcBar">
+      <div class="grid">
+        <div class="field"><label for="bFee">手数料階層</label><select id="bFee"><option value="0.0001">0.01%</option><option value="0.0005" selected>0.05%</option><option value="0.003">0.3%</option><option value="0.01">1.0%</option></select></div>
+        <div class="field"><label for="bVol">Vol24h（$・任意）</label><input id="bVol" type="number" placeholder="GeckoTerminal値" step="any"></div>
+        <div class="field"><label for="bTvl">TVL（$・任意）</label><input id="bTvl" type="number" placeholder="GeckoTerminal値" step="any"></div>
+        <div class="field"><label for="bUtil">想定インレンジ稼働率 %</label><input id="bUtil" type="number" value="80" step="5"></div>
+      </div>
+      <label for="gpAddrB" style="display:block;font-size:11.5px;color:var(--sub);margin:9px 0 4px">実レンジ④⑤ ── プール実測値の自動取得（GeckoTerminal・手数料・Vol24h・TVLへ反映）</label>
+      <div class="gprow">
+        <select id="gpNetB"><option value="base" selected>base</option><option value="eth">eth</option></select>
+        <input id="gpAddrB" type="text" placeholder="0x… プールアドレス" spellcheck="false">
+        <button type="button" class="gpbtn" onclick="gpGo('B')">取得</button>
+      </div>
+      <div id="gpStatB" class="csvsum" hidden></div>
+      <div id="bFeeCostOut" class="csvsum"></div>
+    </div>
   </fieldset>
 </div>
 
@@ -492,6 +508,21 @@ function p3DnStage(rawState,isRelative){
   const base=s===1?'下限割れ確定。50%をステーブルへ退避し、レンジ復帰までは再センタリング禁止。':'ステーブル化済み。レンジ復帰までは再センタリング禁止を継続。';
   return{state:s,label:base+(relNote?' '+relNote:''),warn:true};
 }
+/* --- v1.6 検証タブ・実レンジ④⑤ 純関数（handoff_spec §7実運用フィードバック） --- */
+/* Min/Maxから③集中倍率を算出し、モードA calc()と同一の④⑤式（変更なし）を実レンジに適用する。
+   有効条件: Min>0かつMax>Min、σ>0、Vol>0かつTVL>0。想定稼働率は0〜100にクランプ。
+   条件を満たさない場合は{err}を返し、呼び出し側は「④⑤は未入力」の中立表示にする（レンジ内表示等への読み替えはしない）。 */
+function realRangeFeeCost(min,max,sigmaPct,fee,vol,tvl,util){
+  if(!(min>0&&max>min))return{err:'④⑤は未入力（MinとMaxを入力してください。Min＜Max）'};
+  if(!(sigmaPct>0))return{err:'④⑤は未入力（日次σを入力してください）'};
+  if(!(vol>0&&tvl>0))return{err:'④⑤は未入力（Vol24hとTVLを入力してください）'};
+  const conc=1/(1-Math.pow(min/max,0.25));
+  const u=Math.min(100,Math.max(0,Number(util)||0))/100;
+  const s=sigmaPct/100;
+  const feeAPR=(vol*fee/tvl)*365*100*conc*u;
+  const costAPR=(s*s/8)*365*100*conc;
+  return{conc,feeAPR,costAPR,dominant:feeAPR>costAPR?'fee':'cost'};
+}
 /* ==== v1.1 実測σ ここまで（純関数） ==== */
 let CSVR=null;
 const PRESETS=[[2.2,'静穏'],[3.0,'通常下'],[4.0,'通常上'],[5.0,'高ボラ'],[6.5,'危機']];
@@ -540,7 +571,7 @@ function setMode(m){
   $('tabC').setAttribute('aria-selected',m==='C');
   if(m==='C'){$('exdn').textContent='▼下抜け＝分子資産100%';$('exup').textContent='上抜け＝分母側100%▲';calcC();}
   else{$('exdn').innerHTML=EXDN0;$('exup').innerHTML=EXUP0;}
-  if(m==='B'){calcP3Up();calcP3Dn();}
+  if(m==='B'){calcP3Up();calcP3Dn();calcBFeeCost();}
 }
 /* v1.6 P3上抜け段階再展開タイマー（UI接続・非コア） */
 function calcP3Up(){
@@ -642,10 +673,10 @@ $('cFileN').addEventListener('change',ev=>{const f=ev.target.files&&ev.target.fi
 $('cFileD').addEventListener('change',ev=>{const f=ev.target.files&&ev.target.files[0];if(f)loadC('D',f);});
 /* v1.5 プール自動取得 */
 function applyPool(p){
-  ['aVol','cVol'].forEach(id=>$(id).value=Math.round(p.vol));
-  ['aTvl','cTvl'].forEach(id=>$(id).value=Math.round(p.tvl));
-  if(p.fee!==null)['aFee','cFee'].forEach(id=>$(id).value=String(p.fee));
-  calc();calcC();
+  ['aVol','bVol','cVol'].forEach(id=>$(id).value=Math.round(p.vol));
+  ['aTvl','bTvl','cTvl'].forEach(id=>$(id).value=Math.round(p.tvl));
+  if(p.fee!==null)['aFee','bFee','cFee'].forEach(id=>$(id).value=String(p.fee));
+  calc();calcC();calcBFeeCost();
 }
 async function fetchPool(net,addr){
   addr=(addr||'').trim();
@@ -661,7 +692,19 @@ async function fetchPool(net,addr){
   let j;try{j=await res.json();}catch(err){return{err:'応答の解析に失敗しました。'};}
   return parsePoolJson(j);
 }
-function gpStat(html,isErr){['gpStatA','gpStatC'].forEach(id=>{const el=$(id);el.hidden=false;el.className='csvsum'+(isErr?' err':'');el.innerHTML=html;});}
+function gpStat(html,isErr){['gpStatA','gpStatB','gpStatC'].forEach(id=>{const el=$(id);el.hidden=false;el.className='csvsum'+(isErr?' err':'');el.innerHTML=html;});}
+/* v1.6 検証タブ・実レンジ④⑤（UI接続・非コア） */
+function calcBFeeCost(){
+  const r=realRangeFeeCost(+$('bMin').value,+$('bMax').value,+$('bS').value,+$('bFee').value,+$('bVol').value,+$('bTvl').value,$('bUtil').value);
+  const el=$('bFeeCostOut');
+  if(r.err){el.innerHTML=r.err;return;}
+  const isCost=r.dominant!=='fee';
+  const verdict=isCost?'コスト優位（⑤≧④）':'手数料優位（④＞⑤）';
+  const line='④実効APR ≈'+fmt(r.feeAPR,0)+'%／年 vs ⑤ボラ由来コスト ≈'+fmt(r.costAPR,0)+'%／年 → '+verdict;
+  el.innerHTML='実レンジ集中倍率 約'+fmt(r.conc,1)+'倍<br>'
+    +(isCost?'<span class="warnline">'+line+'</span>':line)
+    +'<br><small>④＝手数料収入の年率概算／⑤＝ボラ由来コストの年率概算。実際のポジションMin/Maxに基づく概算の目安であり、将来の運用成果を保証しない。</small>';
+}
 async function gpGo(w){
   gpStat('取得中…',false);
   const p=await fetchPool($('gpNet'+w).value,$('gpAddr'+w).value);
@@ -677,9 +720,11 @@ async function gpGo(w){
 $('bUpDays').addEventListener('input',calcP3Up);
 $('bDnState').addEventListener('input',calcP3Dn);
 $('bDnRel').addEventListener('input',calcP3Dn);
+['bMin','bMax','bS','bFee','bVol','bTvl','bUtil'].forEach(id=>$(id).addEventListener('input',calcBFeeCost));
 calc();
 calcP3Up();
 calcP3Dn();
+calcBFeeCost();
 </script>
 </body>
 </html>

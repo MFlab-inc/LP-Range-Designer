@@ -238,6 +238,51 @@ test('p3DnStage: 想定外値（未選択・非対応値）は中立表示にフ
   assert.match(bogus.label, /選択してください/);
 });
 
+test('realRangeFeeCost: Min/Max不正はエラー（④⑤未入力扱い）', () => {
+  assert.ok(fn.realRangeFeeCost(0, 100, 4, 0.0005, 1000, 100000, 80).err);
+  assert.ok(fn.realRangeFeeCost(100, 100, 4, 0.0005, 1000, 100000, 80).err);
+  assert.ok(fn.realRangeFeeCost(100, 90, 4, 0.0005, 1000, 100000, 80).err);
+});
+
+test('realRangeFeeCost: σ<=0はエラー（空欄・0・負数すべて）', () => {
+  assert.ok(fn.realRangeFeeCost(90, 100, 0, 0.0005, 1000, 100000, 80).err);
+  assert.ok(fn.realRangeFeeCost(90, 100, -1, 0.0005, 1000, 100000, 80).err);
+  assert.ok(fn.realRangeFeeCost(90, 100, NaN, 0.0005, 1000, 100000, 80).err);
+});
+
+test('realRangeFeeCost: Vol/TVL未入力はエラー', () => {
+  assert.ok(fn.realRangeFeeCost(90, 100, 4, 0.0005, 0, 100000, 80).err);
+  assert.ok(fn.realRangeFeeCost(90, 100, 4, 0.0005, 1000, 0, 80).err);
+});
+
+test('realRangeFeeCost: 集中倍率は③式と一致し、有効時はconc/feeAPR/costAPRを返す', () => {
+  const r = fn.realRangeFeeCost(90, 100, 4, 0.0005, 1_000_000, 10_000_000, 80);
+  assert.equal(r.err, undefined);
+  const expectedConc = 1 / (1 - Math.pow(90 / 100, 0.25));
+  assert.ok(Math.abs(r.conc - expectedConc) < 1e-9);
+  assert.ok(isFinite(r.feeAPR) && r.feeAPR > 0);
+  assert.ok(isFinite(r.costAPR) && r.costAPR > 0);
+});
+
+test('realRangeFeeCost: 想定稼働率は0〜100にクランプされる（150→100、-20→0）', () => {
+  const rHigh = fn.realRangeFeeCost(90, 100, 4, 0.0005, 1_000_000, 10_000_000, 150);
+  const rFull = fn.realRangeFeeCost(90, 100, 4, 0.0005, 1_000_000, 10_000_000, 100);
+  assert.ok(Math.abs(rHigh.feeAPR - rFull.feeAPR) < 1e-9);
+  const rNeg = fn.realRangeFeeCost(90, 100, 4, 0.0005, 1_000_000, 10_000_000, -20);
+  assert.equal(rNeg.feeAPR, 0);
+});
+
+test('realRangeFeeCost: 手数料優位／コスト優位の判定が式通りに切り替わる', () => {
+  // 高Vol・低TVL・低σ → 手数料優位
+  const feeDominant = fn.realRangeFeeCost(90, 100, 1, 0.003, 5_000_000, 1_000_000, 80);
+  assert.equal(feeDominant.dominant, 'fee');
+  assert.ok(feeDominant.feeAPR > feeDominant.costAPR);
+  // 低Vol・高TVL・高σ → コスト優位
+  const costDominant = fn.realRangeFeeCost(90, 100, 8, 0.0001, 1000, 10_000_000, 80);
+  assert.equal(costDominant.dominant, 'cost');
+  assert.ok(costDominant.costAPR >= costDominant.feeAPR);
+});
+
 test('parsePoolJson: 既知の手数料階層以外はfee=null', () => {
   const p = fn.parsePoolJson({
     data: { attributes: { name: 'FOO/BAR 2.5%', volume_usd: { h24: 1 }, reserve_in_usd: 1 } },

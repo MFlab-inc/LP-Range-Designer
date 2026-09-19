@@ -3,12 +3,12 @@
 // 目的はDOM配線（イベント→再計算→表示更新）の疎通確認であり、数値の厳密検証はpure.test.js/data-regression.test.jsが担う。
 
 // HTML初期状態に合わせた既定値。ここに無いidは空文字/非表示で自動生成される。
-const HIDDEN_INIT = new Set(['paneB', 'paneC', 'csvSum', 'gpStatA', 'gpStatC', 'cStatN', 'cStatD', 'cWarn', 'btBlock']);
+const HIDDEN_INIT = new Set(['paneB', 'paneC', 'csvSum', 'gpStatA', 'gpStatB', 'gpStatC', 'cStatN', 'cStatD', 'cWarn', 'btBlock']);
 const VALUE_INIT = {
   aP: '1913', aS: '4.0', aT: '14', aK: '1.4', aSkew: '1.25', aFee: '0.0005', aUtil: '80',
-  bS: '4.0',
+  bS: '4.0', bFee: '0.0005', bUtil: '80',
   cH: '365', cCov: '0.9', cFrom: '2022-01-01', cFee: '0.0005', cUtil: '80',
-  gpNetA: 'base', gpNetC: 'base',
+  gpNetA: 'base', gpNetB: 'base', gpNetC: 'base',
 };
 const INNER_INIT = {
   exdn: '▼下抜け＝ETH側100%',

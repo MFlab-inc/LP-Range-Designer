@@ -160,6 +160,48 @@ test('P3下抜けチェックリスト: state選択と相対ペアチェック�
   assert.match(env.get('p3dnOut').innerHTML, /選択してください/);
 });
 
+test('実レンジ④⑤: 未入力時は中立表示、Min/Max/σ/Vol/TVL入力で判定行が出る', () => {
+  const { env, ui } = loadUi();
+  ui.setMode('B');
+  assert.match(env.get('bFeeCostOut').innerHTML, /④⑤は未入力/);
+
+  env.get('bMin').value = '90';
+  env.get('bMax').value = '100';
+  env.get('bVol').value = '1000000';
+  env.get('bTvl').value = '10000000';
+  env.fire('bMin', 'input');
+  assert.match(env.get('bFeeCostOut').innerHTML, /④実効APR/);
+  assert.match(env.get('bFeeCostOut').innerHTML, /④＞⑤|⑤≧④/);
+});
+
+test('実レンジ④⑤: σが空欄・0のときは中立表示のまま（有効条件からσ>0を除外しない）', () => {
+  const { env, ui } = loadUi();
+  ui.setMode('B');
+  env.get('bMin').value = '90';
+  env.get('bMax').value = '100';
+  env.get('bVol').value = '1000000';
+  env.get('bTvl').value = '10000000';
+  env.get('bS').value = '0';
+  env.fire('bS', 'input');
+  assert.match(env.get('bFeeCostOut').innerHTML, /④⑤は未入力/);
+});
+
+test('gpGo(B): 取得成功でA/B/C三タブのVol/TVL/手数料に同時反映される', async () => {
+  const { env, ui } = loadUi();
+  env.setFetchImpl(async () => ({
+    status: 200, ok: true,
+    json: async () => ({ data: { attributes: {
+      name: 'WETH / USDC 0.3%', volume_usd: { h24: 555000 }, reserve_in_usd: 4440000,
+    } } }),
+  }));
+  env.get('gpAddrB').value = '0x' + 'c'.repeat(40);
+  await ui.gpGo('B');
+  for (const id of ['aVol', 'bVol', 'cVol']) assert.equal(env.get(id).value, 555000);
+  for (const id of ['aTvl', 'bTvl', 'cTvl']) assert.equal(env.get(id).value, 4440000);
+  for (const id of ['aFee', 'bFee', 'cFee']) assert.equal(env.get(id).value, '0.003');
+  assert.equal(env.get('gpStatB').hidden, false);
+});
+
 test('gpGo: fetch失敗時は手入力継続を促すメッセージに劣化', async () => {
   const { env, ui } = loadUi();
   env.setFetchImpl(async () => { throw new Error('network down'); });
