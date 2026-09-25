@@ -16,6 +16,7 @@ const PURE_EXPORT_NAMES = [
   'parseCmcCsv', 'sampleStdev', 'computeRealized', 'dayISO',
   'buildRelSeries', 'sigmaDailyPct', 'excQuantiles',
   'v3ValuePerL', 'backtestBand', 'parsePoolJson', 'p3UpStage', 'p3DnStage', 'realRangeFeeCost',
+  'rangeState',
 ];
 
 function readIndexHtml() {
