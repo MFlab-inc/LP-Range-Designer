@@ -536,6 +536,15 @@ function realRangeFeeCost(min,max,sigmaPct,fee,vol,tvl,util){
   const costAPR=(s*s/8)*365*100*conc;
   return{conc,feeAPR,costAPR,dominant:feeAPR>costAPR?'fee':'cost'};
 }
+/* --- v1.6 検証タブ・レンジ外判定 純関数（handoff_spec §5④・実運用フィードバック） --- */
+/* 現在価格がMin/Maxの外にあるかを判定する。境界（P=max、P=min）は'in'扱い。
+   入力不足（min<=0・max<=min・P<=0）はnullを返し、呼び出し側は何もしない（コアverdictの表示を維持）。 */
+function rangeState(P,min,max){
+  if(!(min>0&&max>min&&P>0))return null;
+  if(P>max)return'above';
+  if(P<min)return'below';
+  return'in';
+}
 /* ==== v1.1 実測σ ここまで（純関数） ==== */
 let CSVR=null;
 const PRESETS=[[2.2,'静穏'],[3.0,'通常下'],[4.0,'通常上'],[5.0,'高ボラ'],[6.5,'危機']];
@@ -584,7 +593,17 @@ function setMode(m){
   $('tabC').setAttribute('aria-selected',m==='C');
   if(m==='C'){$('exdn').textContent='▼下抜け＝分子資産100%';$('exup').textContent='上抜け＝分母側100%▲';calcC();}
   else{$('exdn').innerHTML=EXDN0;$('exup').innerHTML=EXUP0;}
-  if(m==='B'){calcP3Up();calcP3Dn();calcBFeeCost();}
+  if(m==='B'){calcP3Up();calcP3Dn();calcBFeeCost();calcBRangeNote();}
+}
+/* v1.6 検証タブ・レンジ外判定（UI接続・非コア。コアverdict()描画後に上書きする後段上書き方式） */
+function calcBRangeNote(){
+  const s=rangeState(+$('bP').value,+$('bMin').value,+$('bMax').value);
+  if(s!=='above'&&s!=='below')return;
+  const v=$('verdict');
+  v.className='verdict v-warn';
+  v.textContent=s==='above'
+    ?'現在価格がレンジ上限の外（上抜け状態）。滞在日数の判定は適用外。対応手順は上の「P3: 上抜け段階再展開」欄を参照。'
+    :'現在価格がレンジ下限の外（下抜け状態）。滞在日数の判定は適用外。対応手順は上の「P3: 下抜けデリスク・チェックリスト」欄を参照。';
 }
 /* v1.6 P3上抜け段階再展開タイマー（UI接続・非コア） */
 function calcP3Up(){
@@ -730,6 +749,7 @@ async function gpGo(w){
 }
 ['cH','cCov','cFrom','cP','cFee','cVol','cTvl','cUtil'].forEach(id=>$(id).addEventListener('input',calcC));
 ['aP','aS','aT','aK','aSkew','aFee','aVol','aTvl','aUtil','bMin','bMax','bP','bS'].forEach(id=>$(id).addEventListener('input',calc));
+['bP','bMin','bMax','bS'].forEach(id=>$(id).addEventListener('input',calcBRangeNote));
 $('bUpDays').addEventListener('input',calcP3Up);
 $('bDnState').addEventListener('input',calcP3Dn);
 $('bDnRel').addEventListener('input',calcP3Dn);
@@ -738,6 +758,7 @@ calc();
 calcP3Up();
 calcP3Dn();
 calcBFeeCost();
+calcBRangeNote();
 </script>
 </body>
 </html>

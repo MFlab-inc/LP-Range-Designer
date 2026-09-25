@@ -202,6 +202,60 @@ test('gpGo(B): 取得成功でA/B/C三タブのVol/TVL/手数料に同時反映�
   assert.equal(env.get('gpStatB').hidden, false);
 });
 
+test('レンジ外判定: bP>Maxで上抜け文言に上書きされる', () => {
+  const { env, ui } = loadUi();
+  ui.setMode('B');
+  env.get('bMin').value = '90';
+  env.get('bMax').value = '100';
+  env.get('bP').value = '101';
+  env.fire('bP', 'input');
+  assert.equal(env.get('verdict').className, 'verdict v-warn');
+  assert.match(env.get('verdict').textContent, /レンジ上限の外（上抜け状態）/);
+  assert.match(env.get('verdict').textContent, /P3: 上抜け段階再展開/);
+});
+
+test('レンジ外判定: bP<Minで下抜け文言に上書きされる', () => {
+  const { env, ui } = loadUi();
+  ui.setMode('B');
+  env.get('bMin').value = '90';
+  env.get('bMax').value = '100';
+  env.get('bP').value = '89';
+  env.fire('bP', 'input');
+  assert.equal(env.get('verdict').className, 'verdict v-warn');
+  assert.match(env.get('verdict').textContent, /レンジ下限の外（下抜け状態）/);
+  assert.match(env.get('verdict').textContent, /P3: 下抜けデリスク・チェックリスト/);
+});
+
+test('レンジ外判定: レンジ内はコアverdictの文言のまま（上書きなし）', () => {
+  const { env, ui } = loadUi();
+  ui.setMode('B');
+  env.get('bMin').value = '90';
+  env.get('bMax').value = '100';
+  env.get('bP').value = '95';
+  env.fire('bP', 'input');
+  assert.doesNotMatch(env.get('verdict').textContent, /レンジ上限の外|レンジ下限の外/);
+});
+
+test('レンジ外判定: σ変更後もコアcalc再描画に対して上書きが維持される', () => {
+  const { env, ui } = loadUi();
+  ui.setMode('B');
+  env.get('bMin').value = '90';
+  env.get('bMax').value = '100';
+  env.get('bP').value = '101';
+  env.fire('bP', 'input');
+  assert.match(env.get('verdict').textContent, /上抜け状態/);
+
+  env.get('bS').value = '6.0';
+  env.fire('bS', 'input');
+  assert.match(env.get('verdict').textContent, /上抜け状態/);
+});
+
+test('レンジ外判定: モードAの判定文には影響しない', () => {
+  const { env, ui } = loadUi();
+  ui.setMode('A');
+  assert.doesNotMatch(env.get('verdict').textContent, /レンジ上限の外|レンジ下限の外/);
+});
+
 test('gpGo: fetch失敗時は手入力継続を促すメッセージに劣化', async () => {
   const { env, ui } = loadUi();
   env.setFetchImpl(async () => { throw new Error('network down'); });

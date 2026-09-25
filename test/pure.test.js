@@ -283,6 +283,27 @@ test('realRangeFeeCost: 手数料優位／コスト優位の判定が式通り�
   assert.ok(costDominant.costAPR >= costDominant.feeAPR);
 });
 
+test('rangeState: 境界(P=max, P=min)は\'in\'扱い', () => {
+  assert.equal(fn.rangeState(100, 90, 100), 'in');
+  assert.equal(fn.rangeState(90, 90, 100), 'in');
+});
+
+test('rangeState: レンジ内・外側の判定', () => {
+  assert.equal(fn.rangeState(95, 90, 100), 'in');
+  assert.equal(fn.rangeState(101, 90, 100), 'above');
+  assert.equal(fn.rangeState(89, 90, 100), 'below');
+});
+
+test('rangeState: 入力不足(min<=0・max<=min・P<=0)はnull', () => {
+  assert.equal(fn.rangeState(95, 0, 100), null);
+  assert.equal(fn.rangeState(95, -10, 100), null);
+  assert.equal(fn.rangeState(95, 100, 90), null);
+  assert.equal(fn.rangeState(95, 90, 90), null);
+  assert.equal(fn.rangeState(0, 90, 100), null);
+  assert.equal(fn.rangeState(-5, 90, 100), null);
+  assert.equal(fn.rangeState(NaN, 90, 100), null);
+});
+
 test('parsePoolJson: 既知の手数料階層以外はfee=null', () => {
   const p = fn.parsePoolJson({
     data: { attributes: { name: 'FOO/BAR 2.5%', volume_usd: { h24: 1 }, reserve_in_usd: 1 } },
