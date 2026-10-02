@@ -5,9 +5,9 @@
 // HTML初期状態に合わせた既定値。ここに無いidは空文字/非表示で自動生成される。
 const HIDDEN_INIT = new Set(['paneB', 'paneC', 'csvSum', 'gpStatA', 'gpStatB', 'gpStatC', 'cStatN', 'cStatD', 'cWarn', 'btBlock']);
 const VALUE_INIT = {
-  aP: '1913', aS: '4.0', aT: '14', aK: '1.4', aSkew: '1.25', aFee: '0.0005', aUtil: '80',
-  bS: '4.0', bFee: '0.0005', bUtil: '80',
-  cH: '365', cCov: '0.9', cFrom: '2022-01-01', cFee: '0.0005', cUtil: '80',
+  aP: '2700', aS: '3.3', aT: '14', aK: '1.4', aSkew: '1.25', aFee: '0.003', aUtil: '80',
+  bS: '3.3', bFee: '0.003', bUtil: '80',
+  cH: '365', cCov: '0.9', cFrom: '2022-01-01', cFee: '0.003', cUtil: '80',
   gpNetA: 'base', gpNetB: 'base', gpNetC: 'base',
 };
 const INNER_INIT = {

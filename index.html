@@ -144,7 +144,7 @@ details.glossary[open] summary::before{content:'▾ '}
     <h3>設計タブの入力と「推奨レンジ」の意味（はじめての方へ）</h3>
     <dl>
       <dt>日次σ%（実現ボラ）</dt>
-      <dd>その資産が1日にだいたい何%動くかの「実測値」。天気でいう風速にあたり、希望を入れる欄ではなく測って入れる欄（実測σ読込などから）。既定の4.0は仮の値であり、設計時は実測値に置き換えて使う。</dd>
+      <dd>その資産が1日にだいたい何%動くかの「実測値」。天気でいう風速にあたり、希望を入れる欄ではなく測って入れる欄（実測σ読込などから）。既定値は実測に合わせた置き値であり、設計時は実測値に置き換えて使う。</dd>
       <dt>目標滞在日数</dt>
       <dd>何日間レンジに触れずに置きたいかという利用者の「注文」。唯一、完全に希望で決める欄。既定14日は出発点にすぎず、長期運用なら30日・90日等に上げて使う（上げるほど推奨レンジは広くなる）。</dd>
       <dt>安全係数 k</dt>
@@ -181,12 +181,12 @@ details.glossary[open] summary::before{content:'▾ '}
   <fieldset>
     <legend>入力 ── 設計</legend>
     <div class="grid">
-      <div class="field"><label for="aP">現在価格（相対価格）</label><input id="aP" type="number" value="1913" step="any"></div>
-      <div class="field"><label for="aS">日次σ %（実現ボラ）</label><input id="aS" type="number" value="4.0" step="0.1"></div>
+      <div class="field"><label for="aP">現在価格（相対価格）</label><input id="aP" type="number" value="2700" step="any"></div>
+      <div class="field"><label for="aS">日次σ %（実現ボラ）</label><input id="aS" type="number" value="3.3" step="0.1"></div>
       <div class="field"><label for="aT">目標滞在日数</label><input id="aT" type="number" value="14" step="1"></div>
       <div class="field"><label for="aK">安全係数 k（1.0〜2.0）</label><input id="aK" type="number" value="1.4" step="0.1"></div>
       <div class="field"><label for="aSkew">下方スキュー（下幅÷上幅）</label><input id="aSkew" type="number" value="1.25" step="0.05"></div>
-      <div class="field"><label for="aFee">手数料階層</label><select id="aFee"><option value="0.0001">0.01%</option><option value="0.0005" selected>0.05%</option><option value="0.003">0.3%</option><option value="0.01">1.0%</option></select></div>
+      <div class="field"><label for="aFee">手数料階層</label><select id="aFee"><option value="0.0001">0.01%</option><option value="0.0005">0.05%</option><option value="0.003" selected>0.3%</option><option value="0.01">1.0%</option></select></div>
       <div class="field"><label for="aVol">Vol24h（$・任意）</label><input id="aVol" type="number" placeholder="GeckoTerminal値" step="any"></div>
       <div class="field"><label for="aTvl">TVL（$・任意）</label><input id="aTvl" type="number" placeholder="GeckoTerminal値" step="any"></div>
       <div class="field"><label for="aUtil">想定インレンジ稼働率 %</label><input id="aUtil" type="number" value="80" step="5"></div>
@@ -223,7 +223,7 @@ details.glossary[open] summary::before{content:'▾ '}
       <div class="field"><label for="bMin">Min価格</label><input id="bMin" type="number" step="any" placeholder="例 1800"></div>
       <div class="field"><label for="bMax">Max価格</label><input id="bMax" type="number" step="any" placeholder="例 2029"></div>
       <div class="field"><label for="bP">現在価格（任意）</label><input id="bP" type="number" step="any" placeholder="空欄可"></div>
-      <div class="field"><label for="bS">日次σ %</label><input id="bS" type="number" value="4.0" step="0.1"></div>
+      <div class="field"><label for="bS">日次σ %</label><input id="bS" type="number" value="3.3" step="0.1"></div>
     </div>
     <div class="gpbar" id="p3upBar">
       <label for="bUpDays">P3: 上抜け段階再展開 ── 上抜け継続日数（9:00 JST終値ベース・直近から連続、0=レンジ内）</label>
@@ -244,7 +244,7 @@ details.glossary[open] summary::before{content:'▾ '}
     </div>
     <div class="gpbar" id="bFcBar">
       <div class="grid">
-        <div class="field"><label for="bFee">手数料階層</label><select id="bFee"><option value="0.0001">0.01%</option><option value="0.0005" selected>0.05%</option><option value="0.003">0.3%</option><option value="0.01">1.0%</option></select></div>
+        <div class="field"><label for="bFee">手数料階層</label><select id="bFee"><option value="0.0001">0.01%</option><option value="0.0005">0.05%</option><option value="0.003" selected>0.3%</option><option value="0.01">1.0%</option></select></div>
         <div class="field"><label for="bVol">Vol24h（$・任意）</label><input id="bVol" type="number" placeholder="GeckoTerminal値" step="any"></div>
         <div class="field"><label for="bTvl">TVL（$・任意）</label><input id="bTvl" type="number" placeholder="GeckoTerminal値" step="any"></div>
         <div class="field"><label for="bUtil">想定インレンジ稼働率 %</label><input id="bUtil" type="number" value="80" step="5"></div>
@@ -277,7 +277,7 @@ details.glossary[open] summary::before{content:'▾ '}
       <div class="field"><label for="cCov">被覆率（上下独立タイル）</label><select id="cCov"><option value="0.8">80%</option><option value="0.9" selected>90%</option><option value="0.95">95%</option></select></div>
       <div class="field"><label for="cFrom">エントリー母集団</label><select id="cFrom"><option value="2022-01-01" selected>2022年以降</option><option value="">全期間</option></select></div>
       <div class="field"><label for="cP">現在価格（既定＝CSV最新Open）</label><input id="cP" type="number" step="any"></div>
-      <div class="field"><label for="cFee">手数料階層</label><select id="cFee"><option value="0.0001">0.01%</option><option value="0.0005" selected>0.05%</option><option value="0.003">0.3%</option><option value="0.01">1.0%</option></select></div>
+      <div class="field"><label for="cFee">手数料階層</label><select id="cFee"><option value="0.0001">0.01%</option><option value="0.0005">0.05%</option><option value="0.003" selected>0.3%</option><option value="0.01">1.0%</option></select></div>
       <div class="field"><label for="cUtil">想定インレンジ稼働率 %</label><input id="cUtil" type="number" value="80" step="5"></div>
       <div class="field"><label for="cVol">Vol24h（$・任意）</label><input id="cVol" type="number" placeholder="GeckoTerminal値" step="any"></div>
       <div class="field"><label for="cTvl">TVL（$・任意）</label><input id="cTvl" type="number" placeholder="GeckoTerminal値" step="any"></div>
