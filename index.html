@@ -708,7 +708,7 @@ function applyPool(p){
   ['aVol','bVol','cVol'].forEach(id=>$(id).value=Math.round(p.vol));
   ['aTvl','bTvl','cTvl'].forEach(id=>$(id).value=Math.round(p.tvl));
   if(p.fee!==null)['aFee','bFee','cFee'].forEach(id=>$(id).value=String(p.fee));
-  calc();calcC();calcBFeeCost();
+  calc();calcC();calcBFeeCost();calcBRangeNote();
 }
 async function fetchPool(net,addr){
   addr=(addr||'').trim();

@@ -202,6 +202,28 @@ test('gpGo(B): 取得成功でA/B/C三タブのVol/TVL/手数料に同時反映�
   assert.equal(env.get('gpStatB').hidden, false);
 });
 
+test('レンジ外判定: gpGo成功後（applyPool経由）も上書きが維持される', async () => {
+  const { env, ui } = loadUi();
+  ui.setMode('B');
+  env.get('bMin').value = '90';
+  env.get('bMax').value = '100';
+  env.get('bP').value = '89'; // Min未満 → 下抜け状態
+  env.fire('bP', 'input');
+  assert.match(env.get('verdict').textContent, /下抜け状態/);
+
+  env.setFetchImpl(async () => ({
+    status: 200, ok: true,
+    json: async () => ({ data: { attributes: {
+      name: 'WETH / USDC 0.3%', volume_usd: { h24: 555000 }, reserve_in_usd: 4440000,
+    } } }),
+  }));
+  env.get('gpAddrB').value = '0x' + 'd'.repeat(40);
+  await ui.gpGo('B'); // 入力イベント経由ではなく、取得ボタンの処理経路（gpGo→applyPool）を通す
+
+  assert.equal(env.get('verdict').className, 'verdict v-warn');
+  assert.match(env.get('verdict').textContent, /下抜け状態/);
+});
+
 test('レンジ外判定: bP>Maxで上抜け文言に上書きされる', () => {
   const { env, ui } = loadUi();
   ui.setMode('B');
